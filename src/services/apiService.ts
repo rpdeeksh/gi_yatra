@@ -1,5 +1,5 @@
 // API service for backend communication
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://gis-backend-email.onrender.com';
 
 interface ApiResponse<T> {
   data: T;
@@ -48,7 +48,19 @@ class ApiService {
         console.log('API Response:', { url, data });
       }
       
-      return data;
+      // FIXED: Handle raw JSON responses from your backend
+      // If the response already has success/data structure, use it
+      // Otherwise, wrap the raw data in the expected format
+      if (data.hasOwnProperty('success') && data.hasOwnProperty('data')) {
+        return data;
+      } else {
+        // Wrap raw backend response in expected format
+        return {
+          success: true,
+          data: data,
+          message: 'Success'
+        };
+      }
     } catch (error) {
       console.error('API request failed:', { url, error });
       throw error;
@@ -149,16 +161,12 @@ class ApiService {
     return this.request(`/district/${districtName}`);
   }
 
+  // FIXED: Updated to match your curl command structure
   async generateItineraryFromBackend(data: {
-    district: string;
+    destination: string;
     travel_dates: string;
-    gi_products: Array<{
-      name: string;
-      description: string;
-    }>;
-    itinerary_notes?: string;
   }) {
-    return this.request('/generate-itenerary', {
+    return this.request('/generate-itinerary', {
       method: 'POST',
       body: JSON.stringify(data),
     });

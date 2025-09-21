@@ -1,8 +1,23 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../services/apiService';
-import { BackendGIProduct, DistrictInfo, ItineraryGenerationRequest } from '../utils/types';
+
+// Define the types based on your backend response
+interface GIProduct {
+  name: string;
+  description: string;
+}
+
+interface DistrictInfo {
+  district: string;
+  gi_products: GIProduct[];
+}
+
+interface ItineraryGenerationRequest {
+  destination: string;
+  travel_dates: string;
+}
 
 interface UseBackendDataReturn {
   districts: string[];
@@ -15,56 +30,133 @@ interface UseBackendDataReturn {
   generatingItinerary: boolean;
 }
 
-export function useBackendData(): UseBackendDataReturn {
-  const [districts, setDistricts] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loadingDistrict, setLoadingDistrict] = useState<string | null>(null);
-  const [districtInfo, setDistrictInfo] = useState<DistrictInfo | null>(null);
-  const [generatingItinerary, setGeneratingItinerary] = useState(false);
+// Global state to prevent multiple requests
+let globalDistrictsState = {
+  districts: [
+    'Bengaluru Urban', 'Bengaluru Rural', 'Mysuru', 'Mandya', 'Hassan', 'Tumakuru',
+    'Ramanagara', 'Chikkaballapur', 'Kolar', 'Chitradurga', 'Davanagere', 'Shivamogga',
+    'Udupi', 'Dakshina Kannada', 'Uttara Kannada', 'Haveri', 'Dharwad', 'Belagavi',
+    'Bagalkot', 'Vijayapura', 'Bidar', 'Kalaburagi', 'Raichur', 'Koppal', 'Ballari',
+    'Vijayanagara', 'Chamarajanagar', 'Kodagu', 'Chikkamagaluru', 'Yadgir'
+  ],
+  loading: false,
+  error: null as string | null,
+  fetched: false
+};
 
-  // Fetch districts on mount
-  useEffect(() => {
-    fetchDistricts();
-  }, []);
+// Global district info cache
+const districtInfoCache = new Map<string, DistrictInfo>();
 
-  const fetchDistricts = async () => {
+// Global subscribers for state updates
+const subscribers = new Set<() => void>();
+
+const notifySubscribers = () => {
+  subscribers.forEach(callback => callback());
+};
+
+// Singleton fetch function
+let fetchDistrictsPromise: Promise<void> | null = null;
+
+const fetchDistrictsOnce = async (): Promise<void> => {
+  if (fetchDistrictsPromise) {
+    return fetchDistrictsPromise;
+  }
+
+  if (globalDistrictsState.fetched) {
+    return Promise.resolve();
+  }
+
+  fetchDistrictsPromise = (async () => {
     try {
-      setLoading(true);
-      setError(null);
+      globalDistrictsState.loading = true;
+      globalDistrictsState.error = null;
+      notifySubscribers();
+
+      console.log('Fetching districts from backend (singleton)...');
+      
       const response = await apiService.getDistricts();
       
+      console.log('Districts response:', response);
+      
       if (response.success && response.data) {
-        // Assuming the backend returns an array of district names
-        setDistricts(Array.isArray(response.data) ? response.data : []);
+        const fetchedDistricts = Array.isArray(response.data) ? response.data : [];
+        console.log('Setting districts:', fetchedDistricts);
+        
+        if (fetchedDistricts.length > 0) {
+          globalDistrictsState.districts = fetchedDistricts;
+        } else {
+          console.log('Backend returned empty districts, keeping fallback data');
+        }
       } else {
         throw new Error(response.message || 'Failed to fetch districts');
       }
+      
+      globalDistrictsState.fetched = true;
     } catch (err) {
       console.error('Error fetching districts:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch districts');
-      // Fallback to local data if backend fails
-      setDistricts([
-        'Bengaluru Urban', 'Bengaluru Rural', 'Mysuru', 'Mandya', 'Hassan', 'Tumakuru',
-        'Ramanagara', 'Chikkaballapur', 'Kolar', 'Chitradurga', 'Davanagere', 'Shivamogga',
-        'Udupi', 'Dakshina Kannada', 'Uttara Kannada', 'Haveri', 'Dharwad', 'Belagavi',
-        'Bagalkot', 'Vijayapura', 'Bidar', 'Kalaburagi', 'Raichur', 'Koppal', 'Ballari',
-        'Vijayanagara', 'Chamarajanagar', 'Kodagu', 'Chikkamagaluru', 'Yadgir'
-      ]);
+      globalDistrictsState.error = err instanceof Error ? err.message : 'Failed to fetch districts';
+      console.log('Using fallback districts due to error');
     } finally {
-      setLoading(false);
+      globalDistrictsState.loading = false;
+      notifySubscribers();
+      fetchDistrictsPromise = null;
     }
-  };
+  })();
+
+  return fetchDistrictsPromise;
+};
+
+export function useBackendData(): UseBackendDataReturn {
+  const [, forceUpdate] = useState({});
+  const [loadingDistrict, setLoadingDistrict] = useState<string | null>(null);
+  const [districtInfo, setDistrictInfo] = useState<DistrictInfo | null>(null);
+  const [generatingItinerary, setGeneratingItinerary] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // Force re-render when global state changes
+  const triggerUpdate = useCallback(() => {
+    forceUpdate({});
+  }, []);
+
+  // Subscribe to global state changes
+  useEffect(() => {
+    subscribers.add(triggerUpdate);
+    
+    // Fetch districts only once globally
+    if (!globalDistrictsState.fetched && !fetchDistrictsPromise) {
+      fetchDistrictsOnce();
+    }
+    
+    return () => {
+      subscribers.delete(triggerUpdate);
+    };
+  }, [triggerUpdate]);
 
   const getDistrictInfo = async (districtName: string): Promise<DistrictInfo | null> => {
     try {
+      // Check cache first
+      const cacheKey = districtName.toLowerCase();
+      if (districtInfoCache.has(cacheKey)) {
+        const cachedInfo = districtInfoCache.get(cacheKey)!;
+        setDistrictInfo(cachedInfo);
+        return cachedInfo;
+      }
+
       setLoadingDistrict(districtName);
-      setError(null);
+      setLocalError(null);
       
-      const response = await apiService.getDistrictInfo(districtName);
+      console.log(`Fetching info for district: ${districtName}`);
+      
+      const response = await apiService.getDistrictInfo(cacheKey);
+      
+      console.log(`District ${districtName} response:`, response);
       
       if (response.success && response.data) {
         const info = response.data as DistrictInfo;
+        
+        // Cache the result
+        districtInfoCache.set(cacheKey, info);
+        
         setDistrictInfo(info);
         return info;
       } else {
@@ -72,7 +164,7 @@ export function useBackendData(): UseBackendDataReturn {
       }
     } catch (err) {
       console.error(`Error fetching info for district ${districtName}:`, err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch district info');
+      setLocalError(err instanceof Error ? err.message : 'Failed to fetch district info');
       return null;
     } finally {
       setLoadingDistrict(null);
@@ -82,9 +174,13 @@ export function useBackendData(): UseBackendDataReturn {
   const generateItinerary = async (request: ItineraryGenerationRequest) => {
     try {
       setGeneratingItinerary(true);
-      setError(null);
+      setLocalError(null);
+      
+      console.log('Generating itinerary with request:', request);
       
       const response = await apiService.generateItineraryFromBackend(request);
+      
+      console.log('Itinerary response:', response);
       
       if (response.success) {
         return response.data;
@@ -93,7 +189,7 @@ export function useBackendData(): UseBackendDataReturn {
       }
     } catch (err) {
       console.error('Error generating itinerary:', err);
-      setError(err instanceof Error ? err.message : 'Failed to generate itinerary');
+      setLocalError(err instanceof Error ? err.message : 'Failed to generate itinerary');
       throw err;
     } finally {
       setGeneratingItinerary(false);
@@ -101,9 +197,9 @@ export function useBackendData(): UseBackendDataReturn {
   };
 
   return {
-    districts,
-    loading,
-    error,
+    districts: globalDistrictsState.districts,
+    loading: globalDistrictsState.loading,
+    error: globalDistrictsState.error || localError,
     getDistrictInfo,
     generateItinerary,
     loadingDistrict,
