@@ -1,5 +1,6 @@
 import '../styles/globals.css'
 import '../styles/folklore.css'
+import Header from '../components/common/Header'
 import Footer from '../components/common/Footer'
 
 export const metadata = {
@@ -55,6 +56,7 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="folklore-theme">
+        <Header />
         <main className="main-content">
           {children}
         </main>

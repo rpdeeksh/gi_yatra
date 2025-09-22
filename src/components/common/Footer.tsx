@@ -110,7 +110,7 @@ export default function Footer() {
         {/* Footer Bottom */}
         <div className="footer-bottom">
           <div className="footer-bottom-content">
-            <p>&copy; 2025 GI Yatra. All rights reserved.</p>
+            <p>&copy; 2023 GI Yatra. All rights reserved.</p>
             <div className="footer-bottom-links">
               <Link href="/privacy">Privacy</Link>
               <Link href="/terms">Terms</Link>

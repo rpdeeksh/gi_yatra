@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Calendar, MapPin, Search, Loader, AlertCircle, ChevronDown, X, Plus } from 'lucide-react';
 import { useBackendData } from '../../hooks/useBackendData';
 import { BackendGIProduct, DistrictInfo } from '../../utils/types';
 import ItineraryDisplay from '../../components/itinerary/ItineraryDisplay';
 
-export default function SearchPage() {
+function SearchPageContent() {
   const searchParams = useSearchParams();
   const {
     districts,
@@ -87,7 +87,7 @@ export default function SearchPage() {
 
     try {
       const request = {
-        district: selectedDistrict,
+        destination: selectedDistrict,
         travel_dates: travelDates,
         gi_products: selectedProducts,
         itinerary_notes: itineraryNotes
@@ -290,5 +290,22 @@ export default function SearchPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={
+      <div className="search-page">
+        <div className="container">
+          <div className="search-header">
+            <h1 className="heritage-heading">Plan Your Cultural Journey</h1>
+            <p>Loading...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <SearchPageContent />
+    </Suspense>
   );
 }

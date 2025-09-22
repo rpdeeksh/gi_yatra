@@ -329,6 +329,13 @@ export interface ItineraryGenerationRequest {
   itinerary_notes?: string;
 }
 
+export interface BackendItineraryRequest {
+  district: string;
+  travel_dates: string;
+  gi_products: BackendGIProduct[];
+  itinerary_notes?: string;
+}
+
 export interface ItineraryGenerationResponse {
   success: boolean;
   data: any; // This will depend on what the backend returns
